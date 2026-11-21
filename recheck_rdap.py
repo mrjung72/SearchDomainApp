@@ -46,15 +46,21 @@ def collect_domains(paths: list, statuses: set) -> list:
 
 
 def read_csv_rows(path: str):
-    """CSV를 읽는다 — UTF-8(BOM) 우선, 실패 시 CP949/EUC-KR로 재시도."""
-    last_err = None
+    """CSV/TSV를 읽는다 — 구분자 자동 감지, 인코딩은 UTF-8(BOM)→CP949 폴백."""
     for enc in ("utf-8-sig", "cp949", "euc-kr", "utf-8", "latin-1"):
         try:
             with open(path, newline="", encoding=enc) as f:
-                return list(csv.DictReader(f))
-        except UnicodeDecodeError as e:
-            last_err = e
-    raise last_err
+                sample = f.read(8192)
+                f.seek(0)
+                try:
+                    dialect = csv.Sniffer().sniff(
+                        sample, delimiters=",\t;|")
+                except csv.Error:
+                    dialect = csv.excel
+                return list(csv.DictReader(f, dialect=dialect))
+        except UnicodeDecodeError:
+            continue
+    raise UnicodeDecodeError("utf-8", b"", 0, 1, f"{path}: 읽을 수 없는 인코딩")
 
 
 def main():
