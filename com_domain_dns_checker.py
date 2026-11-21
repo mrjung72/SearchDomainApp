@@ -32,6 +32,12 @@ def parse_args():
         default=0.0,
         help="워커당 조회 전 대기 시간(초) — 속도 제한용. 기본값: 0",
     )
+    parser.add_argument(
+        "--digits",
+        action="store_true",
+        help="후보에 숫자 0-9를 포함합니다 (기본: 영문 a-z만). "
+             "포함 시 조회 수가 약 2배(3글자)~3.6배(4글자)로 증가합니다.",
+    )
     return parser.parse_args()
 
 
@@ -43,7 +49,7 @@ def main():
 
     output_file = f"com_{args.length}letter_check.csv"
     run_scan(
-        iter_domains_by_length(args.length),
+        iter_domains_by_length(args.length, with_digits=args.digits),
         output_file,
         workers=args.workers,
         delay=args.delay,

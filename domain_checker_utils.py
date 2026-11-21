@@ -75,18 +75,39 @@ def check_domain(domain: str, retries: int = 2, delay: float = 0.0) -> dict:
     return {"domain": domain, "status": "CHECK_NEEDED_TIMEOUT", "ns": ""}
 
 
-def iter_domains_by_length(length: int):
-    """length글자 .com 도메인 전체를 생성한다 (itertools.product 지연 생성)."""
-    for chars in itertools.product(string.ascii_lowercase, repeat=length):
+def candidate_charset(pattern: str) -> str:
+    """정규식 패턴이 숫자를 허용하면 후보 문자셋에 숫자를 포함한다.
+
+    {n} 수량자 안의 숫자는 도메인 문자가 아니므로 제외하고 판별한다.
+    """
+    stripped = re.sub(r"\{\d+(,\d*)?\}", "", pattern)
+    if re.search(r"\\[dw]|0-9|\d", stripped):
+        return string.ascii_lowercase + string.digits
+    return string.ascii_lowercase
+
+
+def iter_domains_by_length(length: int, with_digits: bool = False):
+    """length글자 .com 도메인 전체를 생성한다 (itertools.product 지연 생성).
+
+    with_digits=True면 a-z0-9 전체(36^N)를 생성한다.
+    """
+    letters = string.ascii_lowercase + (string.digits if with_digits else "")
+    for chars in itertools.product(letters, repeat=length):
         yield f"{''.join(chars)}.com"
 
 
-def build_domains_by_pattern(pattern: str, max_length: int) -> list:
-    """정규식 패턴에 fullmatch 되는 .com 도메인 목록을 만든다."""
+def build_domains_by_pattern(pattern: str, max_length: int,
+                             charset: str = None) -> list:
+    """정규식 패턴에 fullmatch 되는 .com 도메인 목록을 만든다.
+
+    charset을 생략하면 패턴에서 숫자 허용 여부를 자동 판별한다.
+    """
     compiled = re.compile(pattern)
+    if charset is None:
+        charset = candidate_charset(pattern)
     domains = []
     for length in range(1, max_length + 1):
-        for chars in itertools.product(string.ascii_lowercase, repeat=length):
+        for chars in itertools.product(charset, repeat=length):
             domain = f"{''.join(chars)}.com"
             if compiled.fullmatch(domain):
                 domains.append(domain)

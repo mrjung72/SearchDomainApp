@@ -22,6 +22,7 @@ python com_domain_dns_checker.py <글자수> [--workers N] [--delay 초]
 | `python com_domain_dns_checker.py 4` | 4글자 `.com` 전체 456,976개 스캔 |
 | `python com_domain_dns_checker.py 3 --workers 50` | 동시 조회 스레드 50개로 증가 |
 | `python com_domain_dns_checker.py 3 --delay 0.05` | 워커당 0.05초 간격으로 속도 제한 |
+| `python com_domain_dns_checker.py 3 --digits` | 숫자 포함 도메인까지 스캔 (a-z0-9, 46,656개) |
 
 > ⚠️ 5글자 이상(1,180만 개)은 조회량이 매우 크므로 비추천 — 공용 DNS 서버의
 > rate limit에 걸리거나 차단될 수 있습니다.
@@ -34,6 +35,10 @@ python com_regex_domain_checker.py "<정규식>" [--max-length N] [--workers N] 
 
 - 패턴은 **도메인 전체명(`xxx.com`)에 fullmatch** 됩니다.
 - `--max-length`(기본 3) 이하의 모든 길이 조합을 생성해 패턴과 비교합니다.
+- **후보 문자셋은 패턴에서 자동 판별**됩니다 — 패턴에 `0-9`, `\d`, `\w`,
+  또는 숫자가 포함되어 있으면 후보에 숫자가 포함됩니다
+  (예: `^[a-z0-9]{3}\.com$` → a-z0-9 전체, `^[a-z]{3}\.com$` → a-z만).
+  `{n}` 수량자 안의 숫자는 도메인 문자로 보지 않습니다.
 
 | 예시 | 설명 |
 |------|------|
