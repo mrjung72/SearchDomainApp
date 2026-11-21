@@ -28,15 +28,33 @@ def collect_domains(paths: list, statuses: set) -> list:
         else:
             files.append(p)
     for path in files:
-        with open(path, newline="", encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                if row.get("status") in statuses and row.get("domain"):
-                    d = row["domain"].strip().lower()
-                    if d not in seen:
-                        seen.add(d)
-                        domains.append(d)
+        # Excel(.xlsx) 등 바이너리 파일이 .csv로 저장된 경우 명확히 안내
+        with open(path, "rb") as bf:
+            if bf.read(4) == b"PK\x03\x04":
+                raise SystemExit(
+                    f"오류: {path} 는 CSV가 아니라 Excel(.xlsx) 파일입니다.\n"
+                    "Excel에서 '다른 이름으로 저장 → CSV UTF-8'로 저장 후 다시 시도하세요.")
+        rows = read_csv_rows(path)
+        for row in rows:
+            if row.get("status") in statuses and row.get("domain"):
+                d = row["domain"].strip().lower()
+                if d not in seen:
+                    seen.add(d)
+                    domains.append(d)
         print(f"읽음: {path}")
     return domains
+
+
+def read_csv_rows(path: str):
+    """CSV를 읽는다 — UTF-8(BOM) 우선, 실패 시 CP949/EUC-KR로 재시도."""
+    last_err = None
+    for enc in ("utf-8-sig", "cp949", "euc-kr", "utf-8", "latin-1"):
+        try:
+            with open(path, newline="", encoding=enc) as f:
+                return list(csv.DictReader(f))
+        except UnicodeDecodeError as e:
+            last_err = e
+    raise last_err
 
 
 def main():
