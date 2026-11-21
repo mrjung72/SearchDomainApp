@@ -9,7 +9,7 @@ import re
 
 from domain_checker_utils import (
     DEFAULT_MAX_LENGTH, MAX_WORKERS,
-    build_domains_by_pattern, run_scan,
+    build_domains_by_pattern, required_length_hint, run_scan,
 )
 
 
@@ -48,6 +48,13 @@ def main():
     if args.max_length <= 0:
         raise ValueError("최대 문자 개수는 1 이상이어야 합니다.")
 
+    # 패턴의 {n}/{n,m} 수량자가 요구하는 길이가 max-length보다 크면 자동 보정
+    hint = required_length_hint(args.pattern)
+    if hint and args.max_length < hint:
+        print(f"참고: 패턴이 최소 {hint}글자를 요구하여 "
+              f"--max-length를 {hint}로 자동 조정합니다.")
+        args.max_length = hint
+
     safe_pattern_name = re.sub(r"[^a-zA-Z0-9]+", "_", args.pattern).strip("_")
     output_file = f"com_regex_{safe_pattern_name}_check.csv"
 
@@ -56,6 +63,11 @@ def main():
     if not domains:
         print("정규식 패턴에 매칭되는 도메인이 없습니다.")
         return
+
+    if len(domains) > 100_000:
+        print(f"⚠️  검사 대상이 {len(domains):,}개로 매우 많습니다 — "
+              "완료까지 상당 시간이 걸릴 수 있습니다.")
+        print("   패턴을 더 좁히거나 --workers/--delay로 속도를 조절하세요.")
 
     run_scan(
         domains,

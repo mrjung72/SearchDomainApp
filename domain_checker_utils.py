@@ -100,6 +100,19 @@ def iter_domains_by_length(length: int, with_digits: bool = False):
         yield f"{''.join(chars)}.com"
 
 
+def required_length_hint(pattern: str):
+    """패턴의 {n}/{n,m} 수량자에서 요구되는 최소 도메인 길이를 추정한다.
+
+    {n} → n, {n,m} → m(상한), {n,} → n. 수량자가 없으면 None.
+    """
+    lengths = []
+    for m in re.finditer(r"\{(\d+)(?:,(\d*)?)?\}", pattern):
+        n = int(m.group(1))
+        upper = m.group(2)
+        lengths.append(int(upper) if upper else n)
+    return max(lengths) if lengths else None
+
+
 def build_domains_by_pattern(pattern: str, max_length: int,
                              charset: str = None) -> list:
     """정규식 패턴에 fullmatch 되는 .com 도메인 목록을 만든다.
