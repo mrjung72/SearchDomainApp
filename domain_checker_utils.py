@@ -5,6 +5,7 @@
 """
 import csv
 import itertools
+import os
 import re
 import string
 import time
@@ -114,9 +115,19 @@ def build_domains_by_pattern(pattern: str, max_length: int,
     return domains
 
 
+RESULT_DIR = "result"   # 결과 CSV 출력 디렉토리
+
+
+def output_path(base_name: str) -> str:
+    """result/ 디렉토리 아래에 타임스탬프가 붙은 CSV 경로를 만든다."""
+    stem, _ = os.path.splitext(base_name)
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    return os.path.join(RESULT_DIR, f"{stem}_{stamp}.csv")
+
+
 def run_scan(domains, output_file: str, workers: int = MAX_WORKERS,
              delay: float = 0.0, retries: int = 2, desc: str = "도메인"):
-    """도메인 iterable을 스캔해 결과를 CSV에 증분 저장한다.
+    """도메인 iterable을 스캔해 결과를 result/<이름>_<시각>.csv에 증분 저장한다.
 
     완료 순서대로 기록되므로 파일은 알파벳순이 아니다.
     """
@@ -124,12 +135,14 @@ def run_scan(domains, output_file: str, workers: int = MAX_WORKERS,
     total = len(domains)
     start_time = time.time()
     done = 0
+    path = output_path(output_file)
+    os.makedirs(RESULT_DIR, exist_ok=True)
 
     print(f"{desc} 검사 시작")
     print(f"총 검사 대상: {total:,}개")
-    print(f"출력 파일: {output_file}")
+    print(f"출력 파일: {path}")
 
-    with open(output_file, "w", newline="", encoding="utf-8-sig") as f:
+    with open(path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
         writer.writeheader()
         with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -145,4 +158,4 @@ def run_scan(domains, output_file: str, workers: int = MAX_WORKERS,
                     elapsed = time.time() - start_time
                     print(f"[{done}/{total:,}] 완료 ({elapsed:.1f}초 경과)")
 
-    print(f"저장 완료: {output_file} (총 {time.time() - start_time:.1f}초)")
+    print(f"저장 완료: {path} (총 {time.time() - start_time:.1f}초)")

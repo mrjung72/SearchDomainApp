@@ -48,10 +48,12 @@ python com_regex_domain_checker.py "<정규식>" [--max-length N] [--workers N] 
 
 ## 결과 파일
 
-스크립트 실행 위치에 CSV로 저장됩니다 (UTF-8 BOM — 엑셀 바로 열기 가능).
+`result/` 디렉토리 아래에 **실행 시각이 붙은 CSV**로 저장됩니다
+(UTF-8 BOM — 엑셀 바로 열기 가능). 같은 스크립트를 여러 번 실행해도
+이전 결과가 덮어쓰이지 않습니다.
 
-- 글자수 스캔: `com_<N>letter_check.csv`
-- 정규식 스캔: `com_regex_<패턴>_check.csv`
+- 글자수 스캔: `result/com_<N>letter_check_YYYYMMDD_HHMMSS.csv`
+- 정규식 스캔: `result/com_regex_<패턴>_check_YYYYMMDD_HHMMSS.csv`
 
 ### 상태 값
 
