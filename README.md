@@ -46,6 +46,30 @@ python com_regex_domain_checker.py "<정규식>" [--max-length N] [--workers N] 
 | `python com_regex_domain_checker.py "^a.*b\.com$" --max-length 4` | a로 시작하고 b로 끝나는 최대 4글자 도메인 |
 | `python com_regex_domain_checker.py "^(job\|work)\w*\.com$"` | job/work로 시작하는 도메인 |
 
+### 3) RDAP 재검증 (등록 여부 확정)
+
+```bash
+python recheck_rdap.py <결과CSV 또는 result/ 디렉토리> [--status 상태] [--workers N] [--delay 초]
+```
+
+DNS 스캔 결과에서 미등록 후보(`NO_DNS_NXDOMAIN`)를 골라 **레지스트리 공식
+RDAP 프로토콜**로 재검증합니다. DNS NXDOMAIN은 "위임 없음" 신호일 뿐이고,
+RDAP은 Verisign 레지스트리 DB를 직접 조회해 등록 여부를 확정합니다.
+
+| 예시 | 설명 |
+|------|------|
+| `python recheck_rdap.py result/com_3letter_check_20261121_120000.csv` | 해당 CSV의 NXDOMAIN 후보 재검증 |
+| `python recheck_rdap.py result/` | result/ 내 모든 CSV의 후보 일괄 재검증 |
+| `python recheck_rdap.py result/ --status NO_NS_ANSWER` | 다른 상태도 재검증 가능 |
+
+결과는 `result/rdap_recheck_YYYYMMDD_HHMMSS.csv`로 저장됩니다.
+
+| rdap_status | 의미 |
+|-------------|------|
+| `NOT_REGISTERED` | 레지스트리에 없음 — **등록 가능 확정** |
+| `REGISTERED` | 등록됨 — registrar·만료일 컬럼에 정보 포함 |
+| `CHECK_NEEDED_*` | 조회 실패 — 재시도 권장 |
+
 ## 결과 파일
 
 `result/` 디렉토리 아래에 **실행 시각이 붙은 CSV**로 저장됩니다
@@ -81,9 +105,10 @@ python com_regex_domain_checker.py "<정규식>" [--max-length N] [--workers N] 
 
 | 파일 | 역할 |
 |------|------|
-| `domain_checker_utils.py` | 공용 로직 — Resolver, `check_domain`, 도메인 생성, `run_scan` |
+| `domain_checker_utils.py` | 공용 로직 — Resolver, `check_domain`(DNS), `rdap_check`(RDAP), `run_scan` |
 | `com_domain_dns_checker.py` | 글자 수 지정 스캔 진입점 |
 | `com_regex_domain_checker.py` | 정규식 패턴 스캔 진입점 |
+| `recheck_rdap.py` | NXDOMAIN 후보 RDAP 재검증 진입점 |
 | `requirements.txt` | 의존성 (`dnspython`) |
 
 ## 주의사항

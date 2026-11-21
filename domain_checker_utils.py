@@ -5,10 +5,13 @@
 """
 import csv
 import itertools
+import json
 import os
 import re
 import string
 import time
+import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import local
 
@@ -115,6 +118,62 @@ def build_domains_by_pattern(pattern: str, max_length: int,
     return domains
 
 
+RDAP_ENDPOINT = "https://rdap.verisign.com/com/v1/domain/"
+RDAP_FIELDS = ["domain", "rdap_status", "registrar", "expires"]
+
+
+def rdap_check(domain: str, retries: int = 2, delay: float = 0.0) -> dict:
+    """RDAP(레지스트리 공식 프로토콜)로 .com 도메인 등록 여부를 확정한다.
+
+    - 404 → NOT_REGISTERED (레지스트리에 없음 = 등록 가능)
+    - 200 → REGISTERED (registrar·만료일 추출)
+    DNS NXDOMAIN과 달리 레지스트리 DB 기준의 정확한 판정이다.
+    """
+    if delay:
+        time.sleep(delay)
+    url = RDAP_ENDPOINT + domain
+    for attempt in range(retries + 1):
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "SearchDomainApp/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            registrar = ""
+            expires = ""
+            for ent in data.get("entities", []):
+                if "registrar" in ent.get("roles", []):
+                    vcard = ent.get("vcardArray", [None, []])[1]
+                    for item in vcard:
+                        if item and item[0] == "fn":
+                            registrar = item[3]
+                            break
+                    break
+            for ev in data.get("events", []):
+                if ev.get("eventAction") == "expiration":
+                    expires = (ev.get("eventDate") or "")[:10]
+            return {"domain": domain, "rdap_status": "REGISTERED",
+                    "registrar": registrar, "expires": expires}
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return {"domain": domain, "rdap_status": "NOT_REGISTERED",
+                        "registrar": "", "expires": ""}
+            if attempt < retries:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            return {"domain": domain,
+                    "rdap_status": f"CHECK_NEEDED_HTTP{e.code}",
+                    "registrar": "", "expires": ""}
+        except Exception as e:
+            if attempt < retries:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            return {"domain": domain,
+                    "rdap_status": f"CHECK_NEEDED_{type(e).__name__}",
+                    "registrar": "", "expires": ""}
+    return {"domain": domain, "rdap_status": "CHECK_NEEDED_TIMEOUT",
+            "registrar": "", "expires": ""}
+
+
 RESULT_DIR = "result"   # 결과 CSV 출력 디렉토리
 
 
@@ -126,11 +185,15 @@ def output_path(base_name: str) -> str:
 
 
 def run_scan(domains, output_file: str, workers: int = MAX_WORKERS,
-             delay: float = 0.0, retries: int = 2, desc: str = "도메인"):
+             delay: float = 0.0, retries: int = 2, desc: str = "도메인",
+             check_fn=None, fieldnames=None):
     """도메인 iterable을 스캔해 결과를 result/<이름>_<시각>.csv에 증분 저장한다.
 
     완료 순서대로 기록되므로 파일은 알파벳순이 아니다.
+    check_fn/fieldnames를 생략하면 DNS NS 스캔(check_domain)으로 동작한다.
     """
+    check_fn = check_fn or check_domain
+    fieldnames = fieldnames or FIELDNAMES
     domains = list(domains)
     total = len(domains)
     start_time = time.time()
@@ -143,11 +206,11 @@ def run_scan(domains, output_file: str, workers: int = MAX_WORKERS,
     print(f"출력 파일: {path}")
 
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = [
-                executor.submit(check_domain, d, retries, delay)
+                executor.submit(check_fn, d, retries, delay)
                 for d in domains
             ]
             for future in as_completed(futures):
