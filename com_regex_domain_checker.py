@@ -55,14 +55,14 @@ def main():
     inner = inner[:-1] if inner.endswith("$") else inner
     if "^" in inner or "$" in inner:
         print("[경고] 패턴 중간에 ^ 또는 $가 있습니다 - "
-              "도메인 전체 패턴은 보통 ^[a-z]{3}\\.com$ 형태입니다.")
-        print("   패턴을 확인하세요. (예: ^[a-z]{5}\\.com$)")
+              "도메인 전체 패턴은 보통 ^[a-z]{3}\\.com$ 형태입니다.", flush=True)
+        print("   패턴을 확인하세요. (예: ^[a-z]{5}\\.com$)", flush=True)
 
     # 패턴의 {n}/{n,m} 수량자가 요구하는 길이가 max-length보다 크면 자동 보정
     hint = required_length_hint(args.pattern)
     if hint and args.max_length < hint:
         print(f"참고: 패턴이 최소 {hint}글자를 요구하여 "
-              f"--max-length를 {hint}로 자동 조정합니다.")
+              f"--max-length를 {hint}로 자동 조정합니다.", flush=True)
         args.max_length = hint
 
     safe_pattern_name = re.sub(r"[^a-zA-Z0-9]+", "_", args.pattern).strip("_")
@@ -73,15 +73,15 @@ def main():
     estimate = len(charset) ** args.max_length
     if estimate > 100_000:
         print(f"[경고] 패턴이 최대 약 {estimate:,}개 이상의 후보를 만들 수 있습니다 "
-              f"(문자셋 {len(charset)}자 × 최대 {args.max_length}글자).")
+              f"(문자셋 {len(charset)}자 × 최대 {args.max_length}글자).", flush=True)
         print("   실제 매칭 수는 패턴에 따라 줄어들 수 있지만, "
-              "규모가 크면 완료까지 상당 시간이 걸립니다.")
-        print("   패턴을 더 좁히거나 --workers/--delay로 속도를 조절하세요.")
+              "규모가 크면 완료까지 상당 시간이 걸립니다.", flush=True)
+        print("   패턴을 더 좁히거나 --workers/--delay로 속도를 조절하세요.", flush=True)
 
     domains = build_domains_by_pattern(args.pattern, args.max_length)
     first = next(domains, None)  # 지연 생성기 - 첫 후보 존재 여부만 확인
     if first is None:
-        print("정규식 패턴에 매칭되는 도메인이 없습니다.")
+        print("정규식 패턴에 매칭되는 도메인이 없습니다.", flush=True)
         return
     domains = itertools.chain([first], domains)
 

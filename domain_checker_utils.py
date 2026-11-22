@@ -100,17 +100,80 @@ def iter_domains_by_length(length: int, with_digits: bool = False):
         yield f"{''.join(chars)}.com"
 
 
-def required_length_hint(pattern: str):
-    """패턴의 {n}/{n,m} 수량자에서 요구되는 최소 도메인 길이를 추정한다.
+def _quantifier_repeat(s: str, i: int):
+    """i 위치의 수량자(없으면 1, *=0, ?=0, +=1)를 파싱해 (반복수, 다음위치) 반환."""
+    if i >= len(s):
+        return 1, i
+    c = s[i]
+    if c == "{":
+        m = re.match(r"\{(\d+)(?:,(\d*)?)?\}", s[i:])
+        if m:
+            upper = m.group(2)
+            rep = int(upper) if upper else int(m.group(1))
+            return rep, i + m.end()
+        return 1, i
+    if c == "+":
+        return 1, i + 1
+    if c == "?":
+        return 1, i + 1
+    if c == "*":
+        return 0, i + 1
+    return 1, i
 
-    {n} -> n, {n,m} -> m(상한), {n,} -> n. 수량자가 없으면 None.
+
+def _unit_length(s: str, i: int):
+    """i 위치의 정규식 단위(원자/그룹) 길이와 다음 위치를 반환한다."""
+    c = s[i]
+    if c == "\\":
+        return 1, min(i + 2, len(s))          # \d, \w, \. 등
+    if c == "[":
+        j = s.find("]", i + 1)
+        return 1, (j + 1 if j != -1 else i + 1)
+    if c == "(":
+        depth, j = 1, i + 1
+        while j < len(s) and depth:
+            if s[j] == "\\":
+                j += 2
+                continue
+            if s[j] == "(":
+                depth += 1
+            elif s[j] == ")":
+                depth -= 1
+            j += 1
+        return _pattern_length(s[i + 1:j - 1]), j
+    return 1, i + 1
+
+
+def _pattern_length(s: str) -> int:
+    """정규식 조각이 표현하는 최대 고정 길이를 추정한다."""
+    i, total = 0, 0
+    while i < len(s):
+        if s[i] in "^$" and (i == 0 or i == len(s) - 1):
+            i += 1
+            continue
+        w, j = _unit_length(s, i)
+        r, k = _quantifier_repeat(s, j)
+        total += w * r
+        i = k
+    return total
+
+
+def required_length_hint(pattern: str):
+    """패턴이 요구하는 도메인명 길이를 추정한다 (.com 접미사 앞부분 기준).
+
+    수량자뿐 아니라 리터럴·문자클래스·그룹의 길이도 합산한다.
+    예: ^a[a-z]{4}\\.com$ -> 1+4 = 5
     """
-    lengths = []
-    for m in re.finditer(r"\{(\d+)(?:,(\d*)?)?\}", pattern):
-        n = int(m.group(1))
-        upper = m.group(2)
-        lengths.append(int(upper) if upper else n)
-    return max(lengths) if lengths else None
+    body = pattern.strip()
+    if body.startswith("^"):
+        body = body[1:]
+    if body.endswith("$"):
+        body = body[:-1]
+    m = re.search(r"\\\.com|\.com", body)
+    if m:
+        body = body[:m.start()]
+    length = _pattern_length(body)
+    return length if length > 0 else None
 
 
 def build_domains_by_pattern(pattern: str, max_length: int,
@@ -213,8 +276,8 @@ def run_scan(domains, output_file: str, workers: int = MAX_WORKERS,
     os.makedirs(RESULT_DIR, exist_ok=True)
     window = max(workers * 20, 1000)   # 동시 대기 future 상한
 
-    print(f"{desc} 검사 시작")
-    print(f"출력 파일: {path}")
+    print(f"{desc} 검사 시작", flush=True)
+    print(f"출력 파일: {path}", flush=True)
 
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -241,6 +304,6 @@ def run_scan(domains, output_file: str, workers: int = MAX_WORKERS,
                     f.flush()  # 중간 저장 - 중단돼도 진행분 유지
                     elapsed = time.time() - start_time
                     rate = done / elapsed if elapsed else 0
-                    print(f"[{done:,} 완료] ({elapsed:.0f}초 경과, {rate:.0f}건/초)")
+                    print(f"[{done:,} 완료] ({elapsed:.0f}초 경과, {rate:.0f}건/초)", flush=True)
 
-    print(f"저장 완료: {path} (총 {time.time() - start_time:.1f}초, {done:,}개)")
+    print(f"저장 완료: {path} (총 {time.time() - start_time:.1f}초, {done:,}개)", flush=True)
