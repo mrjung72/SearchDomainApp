@@ -12,7 +12,7 @@ import string
 import time
 import urllib.error
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from threading import local
 
 import dns.resolver
@@ -45,7 +45,7 @@ def check_domain(domain: str, retries: int = 2, delay: float = 0.0) -> dict:
     """단일 도메인의 NS 레코드를 조회해 등록 여부를 판정한다.
 
     retries: LifetimeTimeout/NoNameservers 등 일시 오류 재시도 횟수
-    delay:   조회 전 대기 시간(초) — 워커당 속도 제한용
+    delay:   조회 전 대기 시간(초) - 워커당 속도 제한용
     """
     if delay:
         time.sleep(delay)
@@ -63,7 +63,7 @@ def check_domain(domain: str, retries: int = 2, delay: float = 0.0) -> dict:
             # DNS상 존재하지 않는 도메인(미등록 또는 미설정 가능성 높음)
             return {"domain": domain, "status": "NO_DNS_NXDOMAIN", "ns": ""}
         except dns.resolver.NoAnswer:
-            # 도메인은 존재하나 NS 레코드 없음 — 등록됐으나 위임 정보 없음
+            # 도메인은 존재하나 NS 레코드 없음 - 등록됐으나 위임 정보 없음
             return {"domain": domain, "status": "NO_NS_ANSWER", "ns": ""}
         except (dns.resolver.LifetimeTimeout, dns.resolver.NoNameservers):
             if attempt < retries:
@@ -103,7 +103,7 @@ def iter_domains_by_length(length: int, with_digits: bool = False):
 def required_length_hint(pattern: str):
     """패턴의 {n}/{n,m} 수량자에서 요구되는 최소 도메인 길이를 추정한다.
 
-    {n} → n, {n,m} → m(상한), {n,} → n. 수량자가 없으면 None.
+    {n} -> n, {n,m} -> m(상한), {n,} -> n. 수량자가 없으면 None.
     """
     lengths = []
     for m in re.finditer(r"\{(\d+)(?:,(\d*)?)?\}", pattern):
@@ -122,13 +122,11 @@ def build_domains_by_pattern(pattern: str, max_length: int,
     compiled = re.compile(pattern)
     if charset is None:
         charset = candidate_charset(pattern)
-    domains = []
     for length in range(1, max_length + 1):
         for chars in itertools.product(charset, repeat=length):
             domain = f"{''.join(chars)}.com"
             if compiled.fullmatch(domain):
-                domains.append(domain)
-    return domains
+                yield domain
 
 
 RDAP_ENDPOINT = "https://rdap.verisign.com/com/v1/domain/"
@@ -138,8 +136,8 @@ RDAP_FIELDS = ["domain", "rdap_status", "registrar", "expires"]
 def rdap_check(domain: str, retries: int = 2, delay: float = 0.0) -> dict:
     """RDAP(레지스트리 공식 프로토콜)로 .com 도메인 등록 여부를 확정한다.
 
-    - 404 → NOT_REGISTERED (레지스트리에 없음 = 등록 가능)
-    - 200 → REGISTERED (registrar·만료일 추출)
+    - 404 -> NOT_REGISTERED (레지스트리에 없음 = 등록 가능)
+    - 200 -> REGISTERED (registrar·만료일 추출)
     DNS NXDOMAIN과 달리 레지스트리 DB 기준의 정확한 판정이다.
     """
     if delay:
@@ -204,34 +202,45 @@ def run_scan(domains, output_file: str, workers: int = MAX_WORKERS,
 
     완료 순서대로 기록되므로 파일은 알파벳순이 아니다.
     check_fn/fieldnames를 생략하면 DNS NS 스캔(check_domain)으로 동작한다.
+    domains는 지연 생성 iterable도 가능 - 전체를 메모리에 올리지 않고
+    창(window) 단위로 제출해 대량 스캔 시 메모리를 절약한다.
     """
     check_fn = check_fn or check_domain
     fieldnames = fieldnames or FIELDNAMES
-    domains = list(domains)
-    total = len(domains)
     start_time = time.time()
     done = 0
     path = output_path(output_file)
     os.makedirs(RESULT_DIR, exist_ok=True)
+    window = max(workers * 20, 1000)   # 동시 대기 future 상한
 
     print(f"{desc} 검사 시작")
-    print(f"총 검사 대상: {total:,}개")
     print(f"출력 파일: {path}")
 
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
+        pending = set()
+        exhausted = False
+        it = iter(domains)
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [
-                executor.submit(check_fn, d, retries, delay)
-                for d in domains
-            ]
-            for future in as_completed(futures):
-                writer.writerow(future.result())
-                done += 1
-                if done % 1000 == 0 or done == total:
-                    f.flush()  # 중간 저장 — 중단돼도 진행분 유지
+            while True:
+                while not exhausted and len(pending) < window:
+                    try:
+                        d = next(it)
+                    except StopIteration:
+                        exhausted = True
+                        break
+                    pending.add(executor.submit(check_fn, d, retries, delay))
+                if not pending:
+                    break
+                finished, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in finished:
+                    writer.writerow(future.result())
+                done += len(finished)
+                if done % 1000 < len(finished) or (exhausted and not pending):
+                    f.flush()  # 중간 저장 - 중단돼도 진행분 유지
                     elapsed = time.time() - start_time
-                    print(f"[{done}/{total:,}] 완료 ({elapsed:.1f}초 경과)")
+                    rate = done / elapsed if elapsed else 0
+                    print(f"[{done:,} 완료] ({elapsed:.0f}초 경과, {rate:.0f}건/초)")
 
-    print(f"저장 완료: {path} (총 {time.time() - start_time:.1f}초)")
+    print(f"저장 완료: {path} (총 {time.time() - start_time:.1f}초, {done:,}개)")

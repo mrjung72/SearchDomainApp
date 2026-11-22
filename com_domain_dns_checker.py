@@ -30,7 +30,7 @@ def parse_args():
         "--delay",
         type=float,
         default=0.0,
-        help="워커당 조회 전 대기 시간(초) — 속도 제한용. 기본값: 0",
+        help="워커당 조회 전 대기 시간(초) - 속도 제한용. 기본값: 0",
     )
     parser.add_argument(
         "--digits",

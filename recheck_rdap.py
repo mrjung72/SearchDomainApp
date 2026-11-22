@@ -33,7 +33,7 @@ def collect_domains(paths: list, statuses: set) -> list:
             if bf.read(4) == b"PK\x03\x04":
                 raise SystemExit(
                     f"오류: {path} 는 CSV가 아니라 Excel(.xlsx) 파일입니다.\n"
-                    "Excel에서 '다른 이름으로 저장 → CSV UTF-8'로 저장 후 다시 시도하세요.")
+                    "Excel에서 '다른 이름으로 저장 -> CSV UTF-8'로 저장 후 다시 시도하세요.")
         rows = read_csv_rows(path)
         for row in rows:
             if row.get("status") in statuses and row.get("domain"):
@@ -46,7 +46,7 @@ def collect_domains(paths: list, statuses: set) -> list:
 
 
 def read_csv_rows(path: str):
-    """CSV/TSV를 읽는다 — 구분자 자동 감지, 인코딩은 UTF-8(BOM)→CP949 폴백."""
+    """CSV/TSV를 읽는다 - 구분자 자동 감지, 인코딩은 UTF-8(BOM)->CP949 폴백."""
     for enc in ("utf-8-sig", "cp949", "euc-kr", "utf-8", "latin-1"):
         try:
             with open(path, newline="", encoding=enc) as f:

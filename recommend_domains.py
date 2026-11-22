@@ -27,7 +27,7 @@ BAD_SUBSTR = (                      # 비속어·불쾌 문자열
 GOOD_BIGRAMS = {"oo", "ee", "ll", "ss", "tt", "nn", "mm", "zz", "ck", "ng", "sh", "ch", "th"}
 BAD_BIGRAMS = {"qx", "qj", "zx", "xj", "jq", "vq", "fq", "pq", "bk", "dg", "kt", "pt", "pf"}
 
-# 흔한 4글자 영단어/고유명사 — 도메인 수요가 높은 후보
+# 흔한 4글자 영단어/고유명사 - 도메인 수요가 높은 후보
 COMMON_WORDS = set("""
 able acid aged aide airy alan ally also amen ante apex aqua arch area aria arid army atom aunt
 axe4baby back bail bait bake bald bale ball balm band bane bang bank barb bare bark barn base
@@ -122,7 +122,7 @@ def score_domain(name: str) -> float:
     elif nv == 3:
         score += 1
     else:
-        return -1  # 모음 없음/4개 전부 → 발음 불가
+        return -1  # 모음 없음/4개 전부 -> 발음 불가
 
     # 자음 연속 검사
     max_run = 0
@@ -165,7 +165,7 @@ def score_domain(name: str) -> float:
     if low in COMMON_WORDS:
         score += 8
 
-    # 같은 글자 반복 (anna, otto 스타일) — 소폭 가감
+    # 같은 글자 반복 (anna, otto 스타일) - 소폭 가감
     if len(set(low)) <= 3:
         score += 1.5
     if low[0] == low[3] or low[1] == low[2]:
